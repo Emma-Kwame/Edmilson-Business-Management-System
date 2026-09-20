@@ -1,0 +1,10 @@
+{
+  "description": "Create and customize stunning screens for presentations or displays with ease, perfect for professionals seeking to enhance visual communication.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
