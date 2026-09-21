@@ -19,6 +19,42 @@ function downloadCsv(filename: string, headers: string[], rows: (string | number
   URL.revokeObjectURL(url);
 }
 
+const escapeHtml = (s: string | number) =>
+  String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
+
+function tableHtml(headers: string[], rows: (string | number)[][]) {
+  if (rows.length === 0) return '<p style="color:#94a3b8;font-size:13px;">No data recorded yet.</p>';
+  return `<table><thead><tr>${headers.map(h => `<th>${escapeHtml(h)}</th>`).join('')}</tr></thead><tbody>${
+    rows.map(r => `<tr>${r.map(c => `<td>${escapeHtml(c)}</td>`).join('')}</tr>`).join('')
+  }</tbody></table>`;
+}
+
+// Real reports open in their own printable window — window.print() on the
+// main app would just screenshot whatever's on screen (the sidebar, the
+// wrong tab, empty overview cards); this always renders the actual report
+// data regardless of what tab is active, and "Save as PDF" in the print
+// dialog is how the browser turns it into a downloaded file.
+function openPrintWindow(title: string, bodyHtml: string) {
+  const win = window.open('', '_blank', 'width=850,height=1000');
+  if (!win) { alert('Please allow pop-ups for this site to print or save a report as PDF.'); return; }
+  win.document.write(`<!doctype html><html><head><title>${escapeHtml(title)}</title><style>
+    body { font-family: -apple-system, Segoe UI, Arial, sans-serif; padding: 32px; color: #1e293b; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    p.sub { color: #64748b; font-size: 12px; margin: 0 0 24px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; }
+    th { background: #f8fafc; font-weight: 600; }
+    @media print { body { padding: 0; } }
+  </style></head><body>
+    <h1>${escapeHtml(title)}</h1>
+    <p class="sub">Generated ${escapeHtml(new Date().toLocaleString())}</p>
+    ${bodyHtml}
+  </body></html>`);
+  win.document.close();
+  win.focus();
+  setTimeout(() => { try { win.print(); } catch { /* pop-up blocked mid-flight, nothing to do */ } }, 300);
+}
+
 type ReportTarget = { type: 'tab'; tab: string } | { type: 'nav'; page: string };
 
 const REPORTS: { id: string; icon: React.ReactNode; title: string; desc: string; target: ReportTarget }[] = [
@@ -51,8 +87,6 @@ export default function Reports({ onNav }: { onNav: (page: string) => void }) {
     } else if (tab === 'Projects') {
       downloadCsv('project-report.csv', ['ID', 'Name', 'Client', 'Amount', 'Paid', 'Balance', 'Status'],
         PROJECTS.map(p => [p.id, p.name, p.client, p.budget, p.paid, p.balance, p.status]));
-    } else {
-      downloadCsv('reports-overview.csv', ['Report'], REPORTS.map(r => [r.title]));
     }
   };
 
@@ -70,15 +104,28 @@ export default function Reports({ onNav }: { onNav: (page: string) => void }) {
     else onNav(r.target.page);
   };
 
+  const printReport = (id: string) => {
+    if (id === 'financial') openPrintWindow('Financial Report', tableHtml(['Month', 'Revenue', 'Expenses', 'Profit'], monthly.map(m => [m.month, fmt(m.revenue), fmt(m.expenses), fmt(m.profit)])));
+    else if (id === 'attendance') openPrintWindow('Staff Attendance Report', tableHtml(['Day', 'Present', 'Late', 'Absent'], attendanceChart.map(d => [d.day, d.present, d.late, d.absent])));
+    else if (id === 'projects') openPrintWindow('Project Report', tableHtml(['ID', 'Name', 'Client', 'Budget', 'Paid', 'Balance', 'Status'], PROJECTS.map(p => [p.id, p.name, p.client, fmt(p.budget), fmt(p.paid), fmt(p.balance), p.status])));
+    else if (id === 'inventory') openPrintWindow('Inventory Report', tableHtml(['Item', 'Category', 'Qty', 'Unit', 'Status'], INVENTORY.map(i => [i.name, i.category, i.qty, i.unit, i.status])));
+    else if (id === 'sales') openPrintWindow('Sales Report', tableHtml(['ID', 'Client', 'Amount', 'Method', 'Date'], TRANSACTIONS.filter(t => t.type === 'income').map(t => [t.id, t.client, fmt(t.amount), t.method, t.date])));
+    else if (id === 'expenses') openPrintWindow('Expense Report', tableHtml(['ID', 'Vendor', 'Amount', 'Method', 'Date'], TRANSACTIONS.filter(t => t.type === 'expense').map(t => [t.id, t.client, fmt(t.amount), t.method, t.date])));
+  };
+
   return (
     <div className="space-y-5">
       <PageHeader title="Reports & Analytics" sub="Generate and export business reports"
         breadcrumb={['Home', 'Reports']}
         actions={
-          <div className="flex gap-2">
-            <Btn onClick={() => window.print()} variant="outline" size="sm" icon={<Printer size={14} />}>Print / PDF</Btn>
-            <Btn onClick={exportForTab} variant="outline" size="sm" icon={<Download size={14} />}>Export CSV</Btn>
-          </div>
+          tab !== 'Overview' ? (
+            <div className="flex gap-2">
+              <Btn onClick={() => printReport(tab.toLowerCase())} variant="outline" size="sm" icon={<Printer size={14} />}>Print / Save as PDF</Btn>
+              <Btn onClick={exportForTab} variant="outline" size="sm" icon={<Download size={14} />}>Export CSV</Btn>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 max-w-[220px] text-right">Pick a report below, or open a tab above, to print or export it.</p>
+          )
         } />
 
       <Tabs tabs={['Overview', 'Financial', 'Attendance', 'Projects']} active={tab} onChange={setTab} />
@@ -115,7 +162,7 @@ export default function Reports({ onNav }: { onNav: (page: string) => void }) {
                     className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
                     View Report
                   </button>
-                  <button onClick={() => window.print()}
+                  <button onClick={() => printReport(r.id)}
                     className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1">
                     <Download size={11} /> PDF
                   </button>
