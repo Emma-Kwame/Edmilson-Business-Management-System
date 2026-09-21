@@ -33,12 +33,12 @@ export function Badge({ status, label }: { status: string; label?: string }) {
 
 // ─── Button ──────────────────────────────────────────────────────────────────
 export function Btn({
-  children, onClick, variant = 'primary', size = 'md', icon, className = '', type = 'button'
+  children, onClick, variant = 'primary', size = 'md', icon, className = '', type = 'button', disabled
 }: {
   children?: React.ReactNode; onClick?: () => void; variant?: 'primary'|'secondary'|'ghost'|'danger'|'outline';
-  size?: 'sm'|'md'|'lg'; icon?: React.ReactNode; className?: string; type?: 'button'|'submit';
+  size?: 'sm'|'md'|'lg'; icon?: React.ReactNode; className?: string; type?: 'button'|'submit'; disabled?: boolean;
 }) {
-  const base = 'inline-flex items-center gap-2 font-semibold rounded-lg transition-all cursor-pointer border';
+  const base = 'inline-flex items-center gap-2 font-semibold rounded-lg transition-all cursor-pointer border disabled:opacity-50 disabled:cursor-not-allowed';
   const variants = {
     primary: 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700',
     secondary: 'bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200',
@@ -48,7 +48,7 @@ export function Btn({
   };
   const sizes = { sm: 'px-3 py-1.5 text-xs', md: 'px-4 py-2 text-sm', lg: 'px-5 py-2.5 text-sm' };
   return (
-    <button type={type} onClick={onClick} className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
+    <button type={type} onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
       {icon && <span className="flex-shrink-0">{icon}</span>}
       {children}
     </button>
@@ -82,7 +82,7 @@ export function StatCard({
       <div className="flex items-start justify-between">
         <div className="flex-1">
           <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">{label}</p>
-          <p className="text-2xl font-bold text-slate-900 font-display">{value}</p>
+          <p className="text-[clamp(1.25rem,4vw,1.5rem)] font-bold text-slate-900 font-display break-words">{value}</p>
           {sub && <p className="text-xs text-slate-500 mt-1">{sub}</p>}
           {trend && (
             <p className={`text-xs font-semibold mt-2 ${trend.dir === 'up' ? 'text-green-600' : 'text-red-500'}`}>
@@ -102,7 +102,7 @@ export function StatCard({
 export function SectionHeader({ title, action }: { title: string; action?: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between mb-4">
-      <h2 className="text-base font-bold text-slate-800 font-display">{title}</h2>
+      <h2 className="text-base font-semibold text-slate-800 font-display">{title}</h2>
       {action}
     </div>
   );
@@ -124,12 +124,12 @@ export function PageHeader({ title, sub, actions, breadcrumb }: {
           ))}
         </div>
       )}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900 font-display">{title}</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-[clamp(1.25rem,4vw,1.5rem)] font-semibold text-slate-900 font-display truncate">{title}</h1>
           {sub && <p className="text-sm text-slate-500 mt-0.5">{sub}</p>}
         </div>
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        {actions && <div className="flex items-center gap-2 flex-wrap">{actions}</div>}
       </div>
     </div>
   );
@@ -176,56 +176,57 @@ export function Modal({ open, onClose, title, children, width = 'max-w-lg' }: {
   if (!open) return null;
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className={`bg-white rounded-2xl shadow-2xl w-full ${width} max-h-[90vh] overflow-y-auto`}
+      <div className={`bg-white rounded-2xl shadow-2xl w-full ${width} max-h-[90vh] overflow-y-auto flex flex-col`}
         onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-          <h2 className="text-base font-bold text-slate-900 font-display">{title}</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-100 flex-shrink-0">
+          <h2 className="text-base font-bold text-slate-900 font-display truncate min-w-0">{title}</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0">
             <X size={18} />
           </button>
         </div>
-        <div className="p-6">{children}</div>
+        <div className="p-4 sm:p-6 overflow-y-auto">{children}</div>
       </div>
     </div>
   );
 }
 
 // ─── Input ────────────────────────────────────────────────────────────────────
-export function Input({ label, type = 'text', value, onChange, placeholder, required }: {
+export function Input({ label, type = 'text', value, onChange, placeholder, required, disabled }: {
   label?: string; type?: string; value?: string; onChange?: (v: string) => void;
-  placeholder?: string; required?: boolean;
+  placeholder?: string; required?: boolean; disabled?: boolean;
 }) {
   return (
     <div>
       {label && <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}{required && <span className="text-red-500 ml-0.5">*</span>}</label>}
-      <input type={type} value={value} onChange={e => onChange?.(e.target.value)}
-        placeholder={placeholder} className="input-base" />
+      <input type={type} value={value} onChange={e => onChange?.(e.target.value)} disabled={disabled}
+        placeholder={placeholder} className="input-base disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed" />
     </div>
   );
 }
 
-export function Select({ label, value, onChange, options }: {
+export function Select({ label, value, onChange, options, disabled }: {
   label?: string; value?: string; onChange?: (v: string) => void;
-  options: { label: string; value: string }[];
+  options: { label: string; value: string }[]; disabled?: boolean;
 }) {
   return (
     <div>
       {label && <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>}
-      <select value={value} onChange={e => onChange?.(e.target.value)} className="input-base">
+      <select value={value} onChange={e => onChange?.(e.target.value)} disabled={disabled}
+        className="input-base disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed">
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
   );
 }
 
-export function Textarea({ label, value, onChange, placeholder, rows = 3 }: {
-  label?: string; value?: string; onChange?: (v: string) => void; placeholder?: string; rows?: number;
+export function Textarea({ label, value, onChange, placeholder, rows = 3, disabled }: {
+  label?: string; value?: string; onChange?: (v: string) => void; placeholder?: string; rows?: number; disabled?: boolean;
 }) {
   return (
     <div>
       {label && <label className="block text-xs font-semibold text-slate-600 mb-1.5">{label}</label>}
-      <textarea value={value} onChange={e => onChange?.(e.target.value)} rows={rows}
-        placeholder={placeholder} className="input-base resize-none" />
+      <textarea value={value} onChange={e => onChange?.(e.target.value)} rows={rows} disabled={disabled}
+        placeholder={placeholder} className="input-base resize-none disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed" />
     </div>
   );
 }
@@ -235,25 +236,32 @@ export function Tabs({ tabs, active, onChange }: {
   tabs: string[]; active: string; onChange: (t: string) => void;
 }) {
   return (
-    <div className="flex gap-0.5 bg-slate-100 p-1 rounded-lg w-fit">
-      {tabs.map(t => (
-        <button key={t} onClick={() => onChange(t)}
-          className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${
-            active === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-          }`}>
-          {t}
-        </button>
-      ))}
+    <div className="max-w-full overflow-x-auto">
+      <div className="flex gap-0.5 bg-slate-100 p-1 rounded-lg w-fit">
+        {tabs.map(t => (
+          <button key={t} onClick={() => onChange(t)}
+            className={`flex-shrink-0 whitespace-nowrap px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${
+              active === t ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+            }`}>
+            {t}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
 // ─── Avatar ───────────────────────────────────────────────────────────────────
-export function Avatar({ initials, size = 'md', color }: { initials: string; size?: 'sm'|'md'|'lg'; color?: string }) {
+export function Avatar({ initials, size = 'md', color, src }: {
+  initials: string; size?: 'sm'|'md'|'lg'; color?: string; src?: string | null;
+}) {
   const sizes = { sm: 'w-7 h-7 text-xs', md: 'w-9 h-9 text-sm', lg: 'w-12 h-12 text-base' };
   const colors = ['bg-indigo-100 text-indigo-700', 'bg-emerald-100 text-emerald-700', 'bg-amber-100 text-amber-700',
     'bg-pink-100 text-pink-700', 'bg-cyan-100 text-cyan-700', 'bg-purple-100 text-purple-700'];
   const c = color || colors[initials.charCodeAt(0) % colors.length];
+  if (src) {
+    return <img src={src} alt={initials} className={`${sizes[size]} rounded-full object-cover flex-shrink-0`} />;
+  }
   return (
     <div className={`${sizes[size]} ${c} rounded-full flex items-center justify-center font-bold font-display flex-shrink-0`}>
       {initials}

@@ -3,20 +3,22 @@ import type { Role } from '../data/mock';
 import {
   LayoutDashboard, Clock, CheckSquare, FolderKanban, Package,
   DollarSign, BarChart3, Bell, Users, Settings, ChevronRight,
-  Printer, ShieldCheck, FileText,
+  ShieldCheck, FileText,
 } from 'lucide-react';
+import logo from '../assets/Logo-removebg-preview.png';
+import { useData } from '../store';
 
-type NavItem = { id: string; label: string; icon: React.ReactNode; roles: Role[]; badge?: number };
+type NavItem = { id: string; label: string; icon: React.ReactNode; roles: Role[] };
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard size={16} />, roles: ['staff','accountant','manager','owner'] },
-  { id: 'attendance', label: 'Attendance', icon: <Clock size={16} />, roles: ['staff','manager','owner'] },
+  { id: 'attendance', label: 'Attendance', icon: <Clock size={16} />, roles: ['staff','accountant','manager','owner'] },
   { id: 'tasks', label: 'Tasks', icon: <CheckSquare size={16} />, roles: ['staff','manager','owner'] },
   { id: 'projects', label: 'Projects', icon: <FolderKanban size={16} />, roles: ['staff','manager','owner'] },
   { id: 'inventory', label: 'Inventory', icon: <Package size={16} />, roles: ['staff','manager','owner'] },
   { id: 'finance', label: 'Finance', icon: <DollarSign size={16} />, roles: ['accountant','manager','owner'] },
   { id: 'reports', label: 'Reports', icon: <BarChart3 size={16} />, roles: ['accountant','manager','owner'] },
-  { id: 'notifications', label: 'Notifications', icon: <Bell size={16} />, roles: ['staff','accountant','manager','owner'], badge: 3 },
+  { id: 'notifications', label: 'Notifications', icon: <Bell size={16} />, roles: ['staff','accountant','manager','owner'] },
   { id: 'staff', label: 'Staff', icon: <Users size={16} />, roles: ['manager','owner'] },
   { id: 'users', label: 'Users & Roles', icon: <ShieldCheck size={16} />, roles: ['owner'] },
   { id: 'audit', label: 'Audit Log', icon: <FileText size={16} />, roles: ['manager','owner'] },
@@ -24,9 +26,9 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 const ROLE_COLORS: Record<Role, string> = {
-  staff: 'bg-cyan-500/20 text-cyan-300',
-  accountant: 'bg-amber-500/20 text-amber-300',
-  manager: 'bg-purple-500/20 text-purple-300',
+  staff: 'bg-brand-teal/20 text-brand-teal',
+  accountant: 'bg-brand-orange/20 text-brand-orange',
+  manager: 'bg-brand-coral/20 text-brand-coral',
   owner: 'bg-indigo-500/20 text-indigo-300',
 };
 
@@ -39,31 +41,30 @@ interface SidebarProps {
   active: string;
   onNav: (id: string) => void;
   collapsed: boolean;
+  mobileOpen: boolean;
+  onCloseMobile: () => void;
 }
 
-export default function Sidebar({ role, active, onNav, collapsed }: SidebarProps) {
+export default function Sidebar({ role, active, onNav, collapsed, mobileOpen, onCloseMobile }: SidebarProps) {
+  const { unreadCount } = useData();
   const visible = NAV_ITEMS.filter(n => n.roles.includes(role));
 
-  return (
-    <aside
-      className="sidebar-scroll h-screen flex flex-col overflow-y-auto overflow-x-hidden flex-shrink-0 transition-all"
-      style={{ width: collapsed ? 64 : 220, background: '#0D1117', borderRight: '1px solid #21262D' }}
-    >
-      {/* Logo */}
+  // Labels are shown on desktop (lg+, unless manually collapsed) and always
+  // inside the mobile drawer; the tablet breakpoint stays an icon-only rail.
+  const renderNav = (showLabels: boolean) => (
+    <>
       <div className="flex items-center gap-2.5 px-4 py-5 border-b border-white/5">
-        <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
-          <Printer size={15} color="white" />
-        </div>
-        {!collapsed && (
-          <div>
-            <p className="text-white text-sm font-bold font-display leading-tight">PrintCraft</p>
-            <p className="text-slate-500 text-xs">Business Hub</p>
+        <img src={logo} alt="Edmilson Graphics & Photography"
+          className="w-8 h-8 rounded-full object-cover flex-shrink-0 shadow-[0_0_14px_3px_rgba(240,160,92,0.5)]" />
+        {showLabels && (
+          <div className="min-w-0">
+            <p className="text-white text-sm font-semibold font-display leading-tight truncate">Edmilson</p>
+            <p className="text-slate-500 text-xs truncate">Graphics &amp; Photography</p>
           </div>
         )}
       </div>
 
-      {/* Role indicator */}
-      {!collapsed && (
+      {showLabels && (
         <div className="px-3 py-3 border-b border-white/5">
           <span className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-semibold ${ROLE_COLORS[role]}`}>
             {ROLE_LABELS[role]}
@@ -71,8 +72,7 @@ export default function Sidebar({ role, active, onNav, collapsed }: SidebarProps
         </div>
       )}
 
-      {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5">
+      <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
         {visible.map(item => {
           const isActive = active === item.id;
           return (
@@ -84,15 +84,15 @@ export default function Sidebar({ role, active, onNav, collapsed }: SidebarProps
               }`}
             >
               <span className="flex-shrink-0">{item.icon}</span>
-              {!collapsed && (
+              {showLabels && (
                 <>
-                  <span className="flex-1 text-sm font-medium">{item.label}</span>
-                  {item.badge ? (
-                    <span className="bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center">
-                      {item.badge}
+                  <span className="flex-1 text-sm font-medium truncate">{item.label}</span>
+                  {item.id === 'notifications' && unreadCount > 0 ? (
+                    <span className="bg-red-500 text-white text-xs font-bold rounded-full w-4 h-4 flex items-center justify-center flex-shrink-0">
+                      {unreadCount}
                     </span>
                   ) : isActive ? (
-                    <ChevronRight size={12} className="opacity-60" />
+                    <ChevronRight size={12} className="opacity-60 flex-shrink-0" />
                   ) : null}
                 </>
               )}
@@ -101,12 +101,38 @@ export default function Sidebar({ role, active, onNav, collapsed }: SidebarProps
         })}
       </nav>
 
-      {/* Bottom section */}
-      {!collapsed && (
-        <div className="px-3 py-4 border-t border-white/5">
-          <p className="text-xs text-slate-600 text-center">v1.0 · PrintCraft BMS</p>
+      {showLabels && (
+        <div className="px-3 py-4 border-t border-white/5 flex-shrink-0">
+          <p className="text-xs text-slate-600 text-center">v1.0 · Edmilson GP</p>
         </div>
       )}
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop / tablet — persistent, non-overlay */}
+      <aside
+        className={`sidebar-scroll hidden md:flex h-screen flex-col overflow-x-hidden flex-shrink-0 transition-all
+          md:w-16 ${collapsed ? 'lg:w-16' : 'lg:w-[220px]'}`}
+        style={{ background: '#0D1117', borderRight: '1px solid #21262D' }}
+      >
+        {renderNav(!collapsed)}
+      </aside>
+
+      {/* Mobile drawer */}
+      <div className={`md:hidden fixed inset-0 z-[60] ${mobileOpen ? '' : 'pointer-events-none'}`}
+        aria-hidden={!mobileOpen}>
+        <div onClick={onCloseMobile}
+          className={`absolute inset-0 bg-black/50 transition-opacity duration-300 ${mobileOpen ? 'opacity-100' : 'opacity-0'}`} />
+        <aside
+          className={`sidebar-scroll absolute inset-y-0 left-0 w-72 max-w-[80vw] flex flex-col overflow-x-hidden
+            transition-transform duration-300 ease-out ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}`}
+          style={{ background: '#0D1117' }}
+        >
+          {renderNav(true)}
+        </aside>
+      </div>
+    </>
   );
 }

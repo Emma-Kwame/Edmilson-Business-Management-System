@@ -1,29 +1,74 @@
 import React, { useState } from 'react';
-import { MONTHLY_REVENUE, ATTENDANCE_CHART, PROJECTS } from '../data/mock';
+import { useData, monthlySummary, weeklyAttendance } from '../store';
 import { Card, PageHeader, Btn, StatCard, Tabs } from '../components/ui';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
-import { Download, FileText, BarChart3, Users, Package } from 'lucide-react';
+import { Download, FileText, BarChart3, Users, Package, Printer } from 'lucide-react';
 
 const fmt = (n: number) => `GH₵ ${n.toLocaleString()}`;
 
-const REPORTS = [
-  { id: 'attendance', icon: <Users size={18} />, title: 'Staff Attendance Report', desc: 'Daily, weekly, and monthly attendance records', accent: 'indigo' },
-  { id: 'inventory', icon: <Package size={18} />, title: 'Inventory Report', desc: 'Stock levels, usage, and reorder alerts', accent: 'amber' },
-  { id: 'projects', icon: <FileText size={18} />, title: 'Project Report', desc: 'Project progress, timelines, and finances', accent: 'purple' },
-  { id: 'financial', icon: <BarChart3 size={18} />, title: 'Financial Report', desc: 'Revenue, expenses, and profit summary', accent: 'green' },
-  { id: 'sales', icon: <BarChart3 size={18} />, title: 'Sales Report', desc: 'Sales by client, method, and date range', accent: 'cyan' },
-  { id: 'expenses', icon: <BarChart3 size={18} />, title: 'Expense Report', desc: 'Categorized expenses and vendor breakdown', accent: 'red' },
+function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const escape = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = [headers.map(escape).join(','), ...rows.map(r => r.map(escape).join(','))].join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+type ReportTarget = { type: 'tab'; tab: string } | { type: 'nav'; page: string };
+
+const REPORTS: { id: string; icon: React.ReactNode; title: string; desc: string; target: ReportTarget }[] = [
+  { id: 'attendance', icon: <Users size={18} />, title: 'Staff Attendance Report', desc: 'Daily, weekly, and monthly attendance records', target: { type: 'tab', tab: 'Attendance' } },
+  { id: 'inventory', icon: <Package size={18} />, title: 'Inventory Report', desc: 'Stock levels, usage, and reorder alerts', target: { type: 'nav', page: 'inventory' } },
+  { id: 'projects', icon: <FileText size={18} />, title: 'Project Report', desc: 'Project progress, timelines, and finances', target: { type: 'tab', tab: 'Projects' } },
+  { id: 'financial', icon: <BarChart3 size={18} />, title: 'Financial Report', desc: 'Revenue, expenses, and profit summary', target: { type: 'tab', tab: 'Financial' } },
+  { id: 'sales', icon: <BarChart3 size={18} />, title: 'Sales Report', desc: 'Sales by client, method, and date range', target: { type: 'nav', page: 'finance' } },
+  { id: 'expenses', icon: <BarChart3 size={18} />, title: 'Expense Report', desc: 'Categorized expenses and vendor breakdown', target: { type: 'nav', page: 'finance' } },
 ];
 
-export default function Reports() {
+export default function Reports({ onNav }: { onNav: (page: string) => void }) {
+  const { projects: PROJECTS, inventory: INVENTORY, transactions: TRANSACTIONS, attendance: ATTENDANCE } = useData();
   const [tab, setTab] = useState('Overview');
   const [period, setPeriod] = useState('month');
 
-  const totalRevenue = MONTHLY_REVENUE.reduce((s, m) => s + m.revenue, 0);
-  const totalExpenses = MONTHLY_REVENUE.reduce((s, m) => s + m.expenses, 0);
-  const totalProfit = MONTHLY_REVENUE.reduce((s, m) => s + m.profit, 0);
+  const monthly = monthlySummary(TRANSACTIONS, 6);
+  const attendanceChart = weeklyAttendance(ATTENDANCE);
+  const totalRevenue = monthly.reduce((s, m) => s + m.revenue, 0);
+  const totalExpenses = monthly.reduce((s, m) => s + m.expenses, 0);
+  const totalProfit = monthly.reduce((s, m) => s + m.profit, 0);
+
+  const exportForTab = () => {
+    if (tab === 'Financial') {
+      downloadCsv('financial-report.csv', ['Month', 'Revenue', 'Expenses', 'Profit'],
+        monthly.map(m => [m.month, m.revenue, m.expenses, m.profit]));
+    } else if (tab === 'Attendance') {
+      downloadCsv('attendance-report.csv', ['Day', 'Present', 'Late', 'Absent'],
+        attendanceChart.map(d => [d.day, d.present, d.late, d.absent]));
+    } else if (tab === 'Projects') {
+      downloadCsv('project-report.csv', ['ID', 'Name', 'Client', 'Amount', 'Paid', 'Balance', 'Status'],
+        PROJECTS.map(p => [p.id, p.name, p.client, p.budget, p.paid, p.balance, p.status]));
+    } else {
+      downloadCsv('reports-overview.csv', ['Report'], REPORTS.map(r => [r.title]));
+    }
+  };
+
+  const exportReportCsv = (id: string) => {
+    if (id === 'attendance') downloadCsv('attendance-report.csv', ['Day', 'Present', 'Late', 'Absent'], attendanceChart.map(d => [d.day, d.present, d.late, d.absent]));
+    else if (id === 'inventory') downloadCsv('inventory-report.csv', ['Item', 'Category', 'Qty', 'Unit', 'Status'], INVENTORY.map(i => [i.name, i.category, i.qty, i.unit, i.status]));
+    else if (id === 'projects') downloadCsv('project-report.csv', ['ID', 'Name', 'Client', 'Amount', 'Paid', 'Balance', 'Status'], PROJECTS.map(p => [p.id, p.name, p.client, p.budget, p.paid, p.balance, p.status]));
+    else if (id === 'financial') downloadCsv('financial-report.csv', ['Month', 'Revenue', 'Expenses', 'Profit'], monthly.map(m => [m.month, m.revenue, m.expenses, m.profit]));
+    else if (id === 'sales') downloadCsv('sales-report.csv', ['ID', 'Client', 'Amount', 'Method', 'Date'], TRANSACTIONS.filter(t => t.type === 'income').map(t => [t.id, t.client, t.amount, t.method, t.date]));
+    else if (id === 'expenses') downloadCsv('expense-report.csv', ['ID', 'Vendor', 'Amount', 'Method', 'Date'], TRANSACTIONS.filter(t => t.type === 'expense').map(t => [t.id, t.client, t.amount, t.method, t.date]));
+  };
+
+  const viewReport = (r: typeof REPORTS[0]) => {
+    if (r.target.type === 'tab') setTab(r.target.tab);
+    else onNav(r.target.page);
+  };
 
   return (
     <div className="space-y-5">
@@ -31,18 +76,18 @@ export default function Reports() {
         breadcrumb={['Home', 'Reports']}
         actions={
           <div className="flex gap-2">
-            <Btn variant="outline" size="sm" icon={<Download size={14} />}>Export PDF</Btn>
-            <Btn variant="outline" size="sm" icon={<Download size={14} />}>Export CSV</Btn>
+            <Btn onClick={() => window.print()} variant="outline" size="sm" icon={<Printer size={14} />}>Print / PDF</Btn>
+            <Btn onClick={exportForTab} variant="outline" size="sm" icon={<Download size={14} />}>Export CSV</Btn>
           </div>
         } />
 
       <Tabs tabs={['Overview', 'Financial', 'Attendance', 'Projects']} active={tab} onChange={setTab} />
 
       {/* Period Filter */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-1.5 overflow-x-auto max-w-full pb-0.5">
         {['today', 'week', 'month', 'quarter', 'year'].map(p => (
           <button key={p} onClick={() => setPeriod(p)}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
+            className={`flex-shrink-0 whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded-lg capitalize transition-all ${
               period === p ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 border border-slate-200 hover:border-indigo-400 hover:text-indigo-600'
             }`}>
             {p === 'month' ? 'This Month' : p === 'week' ? 'This Week' : p === 'today' ? 'Today' : p === 'quarter' ? 'Quarter' : 'Year'}
@@ -55,7 +100,7 @@ export default function Reports() {
           {/* Report Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {REPORTS.map(r => (
-              <Card key={r.id} className="p-5 cursor-pointer hover:shadow-md hover:border-indigo-200 transition-all group">
+              <Card key={r.id} className="p-5 hover:shadow-md hover:border-indigo-200 transition-all group">
                 <div className="flex items-start gap-3 mb-4">
                   <div className="w-10 h-10 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
                     {r.icon}
@@ -65,14 +110,17 @@ export default function Reports() {
                     <p className="text-xs text-slate-500 mt-0.5">{r.desc}</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <button className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => viewReport(r)}
+                    className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-indigo-50 hover:text-indigo-700 transition-colors">
                     View Report
                   </button>
-                  <button className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1">
+                  <button onClick={() => window.print()}
+                    className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1">
                     <Download size={11} /> PDF
                   </button>
-                  <button className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1">
+                  <button onClick={() => exportReportCsv(r.id)}
+                    className="px-3 py-1.5 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors flex items-center gap-1">
                     <Download size={11} /> CSV
                   </button>
                 </div>
@@ -84,7 +132,7 @@ export default function Reports() {
 
       {tab === 'Financial' && (
         <div className="space-y-5">
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <StatCard label="Total Revenue" value={fmt(totalRevenue)} sub="6 months" icon={<BarChart3 size={18} />} accent="green" />
             <StatCard label="Total Expenses" value={fmt(totalExpenses)} sub="6 months" icon={<BarChart3 size={18} />} accent="red" />
             <StatCard label="Net Profit" value={fmt(totalProfit)} sub="6 months" icon={<BarChart3 size={18} />} accent="indigo" />
@@ -92,7 +140,7 @@ export default function Reports() {
           <Card className="p-5">
             <h3 className="font-bold text-slate-800 font-display mb-4">Monthly Financial Summary</h3>
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={MONTHLY_REVENUE}>
+              <BarChart data={monthly}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} tickFormatter={v => `₵${(v/1000).toFixed(0)}k`} />
@@ -111,7 +159,7 @@ export default function Reports() {
           <Card className="p-5">
             <h3 className="font-bold text-slate-800 font-display mb-4">Weekly Attendance Overview</h3>
             <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={ATTENDANCE_CHART} barSize={20}>
+              <BarChart data={attendanceChart} barSize={20}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                 <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />

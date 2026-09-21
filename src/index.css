@@ -1,20 +1,46 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import 'tailwindcss';
 
 @theme inline {
   --color-sidebar: #0D1117;
   --color-sidebar-hover: #161B22;
   --color-sidebar-active: #1F2937;
-  --color-accent: #4F46E5;
-  --color-accent-light: #EEF2FF;
+  --color-accent: #3457D0;
+  --color-accent-light: #EAF0FE;
   --color-success: #10B981;
   --color-warning: #F59E0B;
   --color-danger: #EF4444;
   --color-info: #06B6D4;
+
+  /* Brand palette — Edmilson Graphics & Photography logo */
+  --color-brand-coral: #E85A72;
+  --color-brand-teal: #3FB6C0;
+  --color-brand-orange: #F0A05C;
+  --color-brand-purple: #5B4FAE;
+
+  /* Re-tune the built-in indigo scale to the logo's blue so every
+     existing bg/text/border/ring-indigo-* utility becomes on-brand
+     without touching each call site individually. */
+  --color-indigo-50: #EAF0FE;
+  --color-indigo-100: #D7E3FD;
+  --color-indigo-200: #B4C9FB;
+  --color-indigo-300: #8CACF7;
+  --color-indigo-400: #5F86F0;
+  --color-indigo-500: #3F68E0;
+  --color-indigo-600: #3457D0;
+  --color-indigo-700: #2A44AC;
+  --color-indigo-800: #22368A;
+  --color-indigo-900: #1C2C6E;
+  --color-indigo-950: #121B47;
 }
 
 * {
   box-sizing: border-box;
+}
+
+html, body, #root {
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -24,17 +50,29 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+img, svg {
+  max-width: 100%;
+  height: auto;
+}
+
 h1, h2, h3, h4, h5, h6 {
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
 .font-display {
-  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
 }
 
 .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
+
+/* Type scale — keep new screens consistent with this.
+   Dashboard / page title   text-2xl (24px) font-semibold  — PageHeader
+   Section title            text-base (16px) font-semibold — SectionHeader
+   Body                     text-sm–text-base (14–16px) font-normal
+   Table text                text-sm (14px) font-normal    — Table/Td
+   Helper / meta text        text-xs (12px) font-normal/medium */
 
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -87,18 +125,25 @@ h1, h2, h3, h4, h5, h6 {
 tbody tr:hover { background: #F8FAFC; }
 
 /* Input base */
-.input-base {
-  width: 100%;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 14px;
-  color: #0F172A;
-  background: #fff;
-  outline: none;
-  transition: border-color 0.15s;
+/* @layer components keeps this beneath Tailwind's utilities layer so
+   pl-9 / pr-10 icon-padding overrides always win, regardless of
+   source order — without it, this rule's `padding` shorthand (being
+   defined after `@import 'tailwindcss'`) silently cancels those
+   utilities on every icon-prefixed input in the app. */
+@layer components {
+  .input-base {
+    width: 100%;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #0F172A;
+    background: #fff;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .input-base:focus { border-color: #4F46E5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
 }
-.input-base:focus { border-color: #4F46E5; box-shadow: 0 0 0 3px rgba(79,70,229,0.1); }
 
 /* Modal backdrop */
 .modal-backdrop {

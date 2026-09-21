@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import type { Role } from '../data/mock';
-import {
-  MONTHLY_REVENUE, PROJECT_STATUS_DATA, ATTENDANCE_CHART, EXPENSES_DATA,
-  PROJECTS, TASKS, INVENTORY, TRANSACTIONS, NOTIFICATIONS, ATTENDANCE,
-} from '../data/mock';
+import { useData, TODAY, monthlySummary, momChange, weeklyAttendance, titleCase } from '../store';
+import { useNow, greetingFor, formatLiveDateTime } from '../hooks/useNow';
 import { StatCard, Card, SectionHeader, Badge, Table, Td, PageHeader, Btn, ProgressBar } from '../components/ui';
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -16,25 +14,48 @@ import {
 
 const fmt = (n: number) => `GH₵ ${n.toLocaleString()}`;
 
+const STATUS_COLORS: Record<string, string> = {
+  'in-progress': '#4F46E5', completed: '#10B981', 'on-hold': '#F59E0B', overdue: '#EF4444', pending: '#64748B',
+};
+
+const trendProp = (pct: number | null) => pct === null ? undefined : { dir: (pct >= 0 ? 'up' : 'down') as 'up' | 'down', val: `${Math.abs(pct).toFixed(1)}%` };
+
 // ─── Owner Dashboard ──────────────────────────────────────────────────────────
 function OwnerDashboard({ onNav }: { onNav: (p: string) => void }) {
+  const { projects: PROJECTS, inventory: INVENTORY, transactions: TRANSACTIONS, attendance: ATTENDANCE, users: USERS, currentUserName } = useData();
+  const now = useNow();
   const [period, setPeriod] = useState('month');
-  const totalRevenue = MONTHLY_REVENUE.reduce((s, m) => s + m.revenue, 0);
-  const totalExpenses = MONTHLY_REVENUE.reduce((s, m) => s + m.expenses, 0);
+  const monthly = monthlySummary(TRANSACTIONS, 6);
+  const totalRevenue = monthly.reduce((s, m) => s + m.revenue, 0);
+  const totalExpenses = monthly.reduce((s, m) => s + m.expenses, 0);
   const netProfit = totalRevenue - totalExpenses;
   const lowStock = INVENTORY.filter(i => i.status === 'low-stock' || i.status === 'out-of-stock').length;
+  const outstanding = PROJECTS.filter(p => p.balance > 0).reduce((s, p) => s + p.balance, 0);
+  const activeStaffCount = USERS.filter(u => u.status === 'active').length;
+  const presentToday = ATTENDANCE.filter(a => a.date === TODAY && (a.status === 'present' || a.status === 'late')).length;
+
+  const projectStatusData = Object.entries(
+    PROJECTS.reduce<Record<string, number>>((acc, p) => { acc[p.status] = (acc[p.status] || 0) + 1; return acc; }, {})
+  ).map(([status, value]) => ({ name: titleCase(status), value, color: STATUS_COLORS[status] || '#94A3B8' }));
+
+  const attendanceChart = weeklyAttendance(ATTENDANCE);
+
+  const expenseByVendor = Object.entries(
+    TRANSACTIONS.filter(t => t.type === 'expense').reduce<Record<string, number>>((acc, t) => { acc[t.client] = (acc[t.client] || 0) + t.amount; return acc; }, {})
+  ).map(([category, amount]) => ({ category, amount })).sort((a, b) => b.amount - a.amount).slice(0, 5);
+  const maxExpense = Math.max(1, ...expenseByVendor.map(e => e.amount));
 
   const periods = ['today','week','month','quarter','year'];
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <PageHeader title="Owner Dashboard" sub="Welcome back, Kwame. Here's your business overview."
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <PageHeader title="Owner Dashboard" sub={`Welcome back, ${currentUserName.split(' ')[0] || 'there'}. ${formatLiveDateTime(now)}`}
           breadcrumb={['Home', 'Dashboard']} />
-        <div className="flex gap-1 bg-white border border-slate-200 rounded-lg p-1">
+        <div className="flex gap-1 bg-white border border-slate-200 rounded-lg p-1 overflow-x-auto max-w-full">
           {periods.map(p => (
             <button key={p} onClick={() => setPeriod(p)}
-              className={`px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all ${
+              className={`flex-shrink-0 whitespace-nowrap px-3 py-1 text-xs font-semibold rounded-md capitalize transition-all ${
                 period === p ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:text-slate-700'
               }`}>{p === 'month' ? 'This Month' : p === 'week' ? 'This Week' : p === 'today' ? 'Today' : p === 'quarter' ? 'Quarter' : 'This Year'}</button>
           ))}
@@ -44,12 +65,12 @@ function OwnerDashboard({ onNav }: { onNav: (p: string) => void }) {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Revenue" value={fmt(totalRevenue)} sub="6-month period"
-          icon={<DollarSign size={18} />} accent="green" trend={{ dir: 'up', val: '8.4%' }} />
+          icon={<DollarSign size={18} />} accent="green" trend={trendProp(momChange(monthly, 'revenue'))} />
         <StatCard label="Net Profit" value={fmt(netProfit)} sub="After expenses"
-          icon={<TrendingUp size={18} />} accent="indigo" trend={{ dir: 'up', val: '12.1%' }} />
+          icon={<TrendingUp size={18} />} accent="indigo" />
         <StatCard label="Total Expenses" value={fmt(totalExpenses)} sub="All categories"
-          icon={<DollarSign size={18} />} accent="amber" trend={{ dir: 'down', val: '3.2%' }} />
-        <StatCard label="Outstanding" value="GH₵ 31,850" sub="3 invoices pending"
+          icon={<DollarSign size={18} />} accent="amber" trend={trendProp(momChange(monthly, 'expenses'))} />
+        <StatCard label="Outstanding" value={fmt(outstanding)} sub={`${PROJECTS.filter(p => p.balance > 0).length} invoices pending`}
           icon={<AlertTriangle size={18} />} accent="red" />
       </div>
 
@@ -58,7 +79,7 @@ function OwnerDashboard({ onNav }: { onNav: (p: string) => void }) {
           icon={<FolderKanban size={18} />} accent="indigo" />
         <StatCard label="Overdue Projects" value={PROJECTS.filter(p => p.status === 'overdue').length} sub="Needs attention"
           icon={<AlertTriangle size={18} />} accent="red" />
-        <StatCard label="Staff Present" value="5 / 7" sub="Today"
+        <StatCard label="Staff Present" value={`${presentToday} / ${activeStaffCount}`} sub="Today"
           icon={<Users size={18} />} accent="green" />
         <StatCard label="Low Stock Items" value={lowStock} sub="Reorder required"
           icon={<Package size={18} />} accent="amber" />
@@ -71,7 +92,7 @@ function OwnerDashboard({ onNav }: { onNav: (p: string) => void }) {
             <span className="text-xs text-slate-400">Last 6 months</span>
           } />
           <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={MONTHLY_REVENUE}>
+            <AreaChart data={monthly}>
               <defs>
                 <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor="#4F46E5" stopOpacity={0.15} />
@@ -98,28 +119,34 @@ function OwnerDashboard({ onNav }: { onNav: (p: string) => void }) {
 
         <Card className="p-5">
           <SectionHeader title="Project Status" />
-          <ResponsiveContainer width="100%" height={160}>
-            <PieChart>
-              <Pie data={PROJECT_STATUS_DATA} cx="50%" cy="50%" innerRadius={45} outerRadius={70}
-                paddingAngle={3} dataKey="value">
-                {PROJECT_STATUS_DATA.map((entry, i) => (
-                  <Cell key={i} fill={entry.color} />
+          {projectStatusData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie data={projectStatusData} cx="50%" cy="50%" innerRadius={45} outerRadius={70}
+                    paddingAngle={3} dataKey="value">
+                    {projectStatusData.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-1.5 mt-2">
+                {projectStatusData.map(d => (
+                  <div key={d.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
+                      <span className="text-slate-600">{d.name}</span>
+                    </div>
+                    <span className="font-semibold text-slate-800">{d.value}</span>
+                  </div>
                 ))}
-              </Pie>
-              <Tooltip contentStyle={{ borderRadius: 8, border: '1px solid #E2E8F0', fontSize: 12 }} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-1.5 mt-2">
-            {PROJECT_STATUS_DATA.map(d => (
-              <div key={d.name} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: d.color }} />
-                  <span className="text-slate-600">{d.name}</span>
-                </div>
-                <span className="font-semibold text-slate-800">{d.value}</span>
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <p className="text-xs text-slate-400 text-center py-8">No projects yet.</p>
+          )}
         </Card>
       </div>
 
@@ -128,7 +155,7 @@ function OwnerDashboard({ onNav }: { onNav: (p: string) => void }) {
         <Card className="p-5">
           <SectionHeader title="Staff Attendance This Week" />
           <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={ATTENDANCE_CHART} barSize={14}>
+            <BarChart data={attendanceChart} barSize={14}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
@@ -142,18 +169,22 @@ function OwnerDashboard({ onNav }: { onNav: (p: string) => void }) {
 
         {/* Expenses Breakdown */}
         <Card className="p-5">
-          <SectionHeader title="Expenses Breakdown" action={<span className="text-xs text-slate-400">Sep 2025</span>} />
-          <div className="space-y-3 mt-2">
-            {EXPENSES_DATA.map(e => (
-              <div key={e.category}>
-                <div className="flex justify-between text-xs mb-1">
-                  <span className="text-slate-600 font-medium">{e.category}</span>
-                  <span className="font-semibold text-slate-800 font-mono">{fmt(e.amount)}</span>
+          <SectionHeader title="Top Expenses by Vendor" action={<span className="text-xs text-slate-400">{now.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</span>} />
+          {expenseByVendor.length > 0 ? (
+            <div className="space-y-3 mt-2">
+              {expenseByVendor.map(e => (
+                <div key={e.category}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-slate-600 font-medium">{e.category}</span>
+                    <span className="font-semibold text-slate-800 font-mono">{fmt(e.amount)}</span>
+                  </div>
+                  <ProgressBar value={e.amount} max={maxExpense} color={e.amount > maxExpense * 0.66 ? 'indigo' : e.amount > maxExpense * 0.25 ? 'amber' : 'green'} />
                 </div>
-                <ProgressBar value={e.amount} max={6000} color={e.amount > 4000 ? 'indigo' : e.amount > 1500 ? 'amber' : 'green'} />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 text-center py-8">No expenses recorded yet.</p>
+          )}
         </Card>
       </div>
 
@@ -221,18 +252,24 @@ function OwnerDashboard({ onNav }: { onNav: (p: string) => void }) {
 
 // ─── Manager Dashboard ────────────────────────────────────────────────────────
 function ManagerDashboard({ onNav }: { onNav: (p: string) => void }) {
+  const { projects: PROJECTS, tasks: TASKS, inventory: INVENTORY, attendance: ATTENDANCE, users: USERS, currentUserName } = useData();
+  const now = useNow();
   const overdueTasks = TASKS.filter(t => t.status === 'overdue').length;
   const activeTasks = TASKS.filter(t => t.status === 'in-progress').length;
+  const activeStaffCount = USERS.filter(u => u.status === 'active').length;
+  const presentToday = ATTENDANCE.filter(a => a.date === TODAY && (a.status === 'present' || a.status === 'late')).length;
+  const tasksDueToday = TASKS.filter(t => t.deadline === TODAY);
+  const urgentDueToday = tasksDueToday.filter(t => t.priority === 'urgent').length;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Manager Dashboard" sub="Operations overview for Thursday, 18 September 2025."
+      <PageHeader title="Manager Dashboard" sub={`Welcome back, ${currentUserName.split(' ')[0] || 'there'}. ${formatLiveDateTime(now)}`}
         breadcrumb={['Home', 'Dashboard']} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Staff Present" value="5 / 7" sub="2 absent today" icon={<Users size={18} />} accent="green" />
+        <StatCard label="Staff Present" value={`${presentToday} / ${activeStaffCount}`} sub={`${Math.max(0, activeStaffCount - presentToday)} absent today`} icon={<Users size={18} />} accent="green" />
         <StatCard label="Active Projects" value={PROJECTS.filter(p => p.status === 'in-progress').length} sub="In progress" icon={<FolderKanban size={18} />} accent="indigo" />
-        <StatCard label="Tasks Due Today" value={3} sub="2 urgent" icon={<CheckSquare size={18} />} accent="amber" />
+        <StatCard label="Tasks Due Today" value={tasksDueToday.length} sub={`${urgentDueToday} urgent`} icon={<CheckSquare size={18} />} accent="amber" />
         <StatCard label="Low Stock Items" value={INVENTORY.filter(i => i.status !== 'in-stock').length} sub="Needs reorder" icon={<Package size={18} />} accent="red" />
       </div>
 
@@ -247,10 +284,10 @@ function ManagerDashboard({ onNav }: { onNav: (p: string) => void }) {
           <div className="divide-y divide-slate-50">
             {PROJECTS.filter(p => p.status === 'in-progress' || p.status === 'on-hold' || p.status === 'overdue').slice(0, 5).map(p => (
               <div key={p.id} className="px-5 py-3">
-                <div className="flex items-start justify-between mb-2">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{p.name}</p>
-                    <p className="text-xs text-slate-400">{p.client} · Due {p.deadline}</p>
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{p.name}</p>
+                    <p className="text-xs text-slate-400 truncate">{p.client} · Due {p.deadline}</p>
                   </div>
                   <Badge status={p.status} />
                 </div>
@@ -269,7 +306,7 @@ function ManagerDashboard({ onNav }: { onNav: (p: string) => void }) {
             } />
           </div>
           <Table headers={['Staff', 'Clock In', 'Status']}>
-            {ATTENDANCE.filter(a => a.date === '2025-09-18').map(a => (
+            {ATTENDANCE.filter(a => a.date === TODAY).map(a => (
               <tr key={a.id}>
                 <Td><span className="text-xs font-semibold text-slate-800">{a.staff}</span></Td>
                 <Td mono>{a.clockIn || '—'}</Td>
@@ -308,18 +345,21 @@ function ManagerDashboard({ onNav }: { onNav: (p: string) => void }) {
 
 // ─── Accountant Dashboard ─────────────────────────────────────────────────────
 function AccountantDashboard({ onNav }: { onNav: (p: string) => void }) {
+  const { projects: PROJECTS, transactions: TRANSACTIONS, currentUserName } = useData();
+  const now = useNow();
+  const monthly = monthlySummary(TRANSACTIONS, 6);
   const income = TRANSACTIONS.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expenses = TRANSACTIONS.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const outstanding = PROJECTS.filter(p => p.balance > 0).reduce((s, p) => s + p.balance, 0);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Accountant Dashboard" sub="Financial overview for September 2025."
+      <PageHeader title="Accountant Dashboard" sub={`Welcome back, ${currentUserName.split(' ')[0] || 'there'}. ${formatLiveDateTime(now)}`}
         breadcrumb={['Home', 'Dashboard']} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Monthly Income" value={fmt(income)} sub="Recorded payments" icon={<TrendingUp size={18} />} accent="green" trend={{ dir: 'up', val: '14%' }} />
-        <StatCard label="Expenses" value={fmt(expenses)} sub="Sep 2025" icon={<DollarSign size={18} />} accent="red" />
+        <StatCard label="Monthly Income" value={fmt(income)} sub="Recorded payments" icon={<TrendingUp size={18} />} accent="green" trend={trendProp(momChange(monthly, 'revenue'))} />
+        <StatCard label="Expenses" value={fmt(expenses)} sub={now.toLocaleDateString(undefined, { month: 'short', year: 'numeric' })} icon={<DollarSign size={18} />} accent="red" />
         <StatCard label="Net Income" value={fmt(income - expenses)} sub="After expenses" icon={<DollarSign size={18} />} accent="indigo" />
         <StatCard label="Outstanding" value={fmt(outstanding)} sub="Awaiting payment" icon={<AlertTriangle size={18} />} accent="amber" />
       </div>
@@ -329,7 +369,7 @@ function AccountantDashboard({ onNav }: { onNav: (p: string) => void }) {
         <Card className="p-5">
           <SectionHeader title="Monthly Revenue Trend" />
           <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={MONTHLY_REVENUE}>
+            <BarChart data={monthly}>
               <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
               <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: '#94A3B8' }} axisLine={false} tickLine={false}
@@ -349,7 +389,7 @@ function AccountantDashboard({ onNav }: { onNav: (p: string) => void }) {
               <button onClick={() => onNav('finance')} className="text-xs text-indigo-600 font-semibold hover:underline">View all</button>
             } />
           </div>
-          <Table headers={['Project / Client', 'Budget', 'Paid', 'Balance']}>
+          <Table headers={['Project / Client', 'Amount', 'Paid', 'Balance']}>
             {PROJECTS.filter(p => p.balance > 0).slice(0, 5).map(p => (
               <tr key={p.id}>
                 <Td>
@@ -399,17 +439,20 @@ function AccountantDashboard({ onNav }: { onNav: (p: string) => void }) {
 
 // ─── Staff Dashboard ──────────────────────────────────────────────────────────
 function StaffDashboard({ onNav }: { onNav: (p: string) => void }) {
-  const [clockedIn, setClockedIn] = useState(true);
-  const myTasks = TASKS.filter(t => t.assigned === 'Abena Darko');
+  const { tasks: TASKS, attendance, clockIn, clockOut, currentUserName } = useData();
+  const now = useNow();
+  const myTasks = TASKS.filter(t => t.assigned === currentUserName);
+  const myAttendanceToday = attendance.find(a => a.staff === currentUserName && a.date === TODAY);
+  const clockedIn = !!myAttendanceToday?.clockIn && !myAttendanceToday?.clockOut;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="My Dashboard" sub="Good morning, Abena! Thursday, 18 September 2025."
+      <PageHeader title="My Dashboard" sub={`${greetingFor(now)}, ${currentUserName.split(' ')[0] || 'there'}! ${formatLiveDateTime(now)}`}
         breadcrumb={['Home', 'Dashboard']} />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Clock-In Time" value="08:02 AM" sub="On time today" icon={<Clock size={18} />} accent="green" />
-        <StatCard label="Hours Worked" value="5h 43m" sub="Today so far" icon={<Clock size={18} />} accent="indigo" />
+        <StatCard label="Clock-In Time" value={myAttendanceToday?.clockIn || '—'} sub={clockedIn ? 'Currently working' : 'Not yet clocked in'} icon={<Clock size={18} />} accent="green" />
+        <StatCard label="Hours Worked" value={myAttendanceToday?.hours && myAttendanceToday.hours !== '-' ? myAttendanceToday.hours : '—'} sub="Today so far" icon={<Clock size={18} />} accent="indigo" />
         <StatCard label="My Tasks" value={myTasks.length} sub="Assigned to me" icon={<CheckSquare size={18} />} accent="cyan" />
         <StatCard label="Pending Tasks" value={myTasks.filter(t => t.status !== 'completed').length} sub="Need action" icon={<AlertTriangle size={18} />} accent="amber" />
       </div>
@@ -422,9 +465,11 @@ function StaffDashboard({ onNav }: { onNav: (p: string) => void }) {
             <Clock size={32} className={clockedIn ? 'text-green-600' : 'text-slate-400'} />
           </div>
           <p className="font-bold text-slate-900 font-display mb-1">{clockedIn ? 'Clocked In' : 'Not Clocked In'}</p>
-          <p className="text-sm text-slate-500 mb-4">{clockedIn ? 'Since 08:02 AM' : 'You haven\'t clocked in yet'}</p>
+          <p className="text-sm text-slate-500 mb-4">
+            {clockedIn ? `Since ${myAttendanceToday?.clockIn}` : myAttendanceToday?.clockOut ? `Clocked out at ${myAttendanceToday.clockOut}` : 'You haven\'t clocked in yet'}
+          </p>
           <button
-            onClick={() => setClockedIn(!clockedIn)}
+            onClick={() => clockedIn ? clockOut() : clockIn()}
             className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition-all ${
               clockedIn
                 ? 'bg-red-600 text-white hover:bg-red-700'
@@ -457,45 +502,24 @@ function StaffDashboard({ onNav }: { onNav: (p: string) => void }) {
         </Card>
       </div>
 
-      {/* Upcoming Deadlines + Notifications */}
-      <div className="grid lg:grid-cols-2 gap-4">
-        <Card className="p-5">
-          <SectionHeader title="Upcoming Deadlines" />
-          <div className="space-y-3">
-            {myTasks.filter(t => t.status !== 'completed').slice(0, 4).map(t => (
-              <div key={t.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
-                <div className={`w-1 h-10 rounded-full ${
-                  t.priority === 'urgent' ? 'bg-red-500' : t.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'
-                }`} />
-                <div className="flex-1">
-                  <p className="text-xs font-semibold text-slate-800">{t.name}</p>
-                  <p className="text-xs text-slate-400">Due: {t.deadline}</p>
-                </div>
-                <Badge status={t.status} />
+      {/* Upcoming Deadlines */}
+      <Card className="p-5">
+        <SectionHeader title="Upcoming Deadlines" />
+        <div className="space-y-3">
+          {myTasks.filter(t => t.status !== 'completed').slice(0, 4).map(t => (
+            <div key={t.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
+              <div className={`w-1 h-10 rounded-full ${
+                t.priority === 'urgent' ? 'bg-red-500' : t.priority === 'high' ? 'bg-orange-500' : 'bg-blue-500'
+              }`} />
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-slate-800">{t.name}</p>
+                <p className="text-xs text-slate-400">Due: {t.deadline}</p>
               </div>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="p-5">
-          <SectionHeader title="Recent Notifications" action={
-            <button onClick={() => onNav('notifications')} className="text-xs text-indigo-600 font-semibold hover:underline">View all</button>
-          } />
-          <div className="space-y-3">
-            {NOTIFICATIONS.slice(0, 4).map(n => (
-              <div key={n.id} className={`flex items-start gap-3 p-3 rounded-lg ${!n.read ? 'bg-indigo-50' : 'bg-slate-50'}`}>
-                <span className="text-lg">{n.icon}</span>
-                <div className="flex-1">
-                  <p className="text-xs font-semibold text-slate-800">{n.title}</p>
-                  <p className="text-xs text-slate-500 line-clamp-1">{n.message}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{n.time}</p>
-                </div>
-                {!n.read && <div className="w-2 h-2 bg-indigo-600 rounded-full flex-shrink-0 mt-1" />}
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+              <Badge status={t.status} />
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 }

@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { AUDIT_LOGS } from '../data/mock';
+import { useData } from '../store';
 import { Card, PageHeader, SearchInput, Table, Td, Select } from '../components/ui';
 import { Avatar } from '../components/ui';
 
 export default function AuditLog() {
+  const { auditLogs: AUDIT_LOGS } = useData();
   const [search, setSearch] = useState('');
   const [filterModule, setFilterModule] = useState('all');
 

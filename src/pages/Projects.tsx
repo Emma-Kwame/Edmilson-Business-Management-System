@@ -1,15 +1,33 @@
 import React, { useState } from 'react';
-import { PROJECTS } from '../data/mock';
+import type { Role } from '../data/mock';
+import { useData } from '../store';
 import { Badge, Btn, Card, PageHeader, SearchInput, Table, Td, Modal, Input, Select, Textarea, StatCard, ProgressBar } from '../components/ui';
-import { Plus, FolderKanban, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
+import { Plus, FolderKanban, CheckCircle, AlertTriangle, Clock, Briefcase } from 'lucide-react';
 
 const fmt = (n: number) => `GH₵ ${n.toLocaleString()}`;
 
-export default function Projects() {
+interface ProjectsProps {
+  role: Role;
+  onViewTasks: (projectName: string) => void;
+  onRecordPayment: (payload: { projectId: string; client: string; amount: number }) => void;
+}
+
+const emptyForm = {
+  name: '', client: '', description: '', amount: '', priority: 'medium',
+  start: '', deadline: '', category: 'print',
+};
+
+export default function Projects({ role, onViewTasks, onRecordPayment }: ProjectsProps) {
+  const { projects: PROJECTS, addProject, updateProject, currentUserName } = useData();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [addOpen, setAddOpen] = useState(false);
-  const [detail, setDetail] = useState<typeof PROJECTS[0] | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const isStaff = role === 'staff';
+
+  const detail = PROJECTS.find(p => p.id === detailId) || null;
 
   const filtered = PROJECTS.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -18,10 +36,42 @@ export default function Projects() {
     return matchSearch && matchStatus;
   });
 
+  const openCreate = () => { setEditingId(null); setForm(emptyForm); setAddOpen(true); };
+  const openEdit = (p: typeof PROJECTS[0]) => {
+    setEditingId(p.id);
+    setForm({
+      name: p.name, client: p.client, description: p.description, amount: String(p.budget),
+      priority: p.priority, start: p.start, deadline: p.deadline, category: p.category,
+    });
+    setDetailId(null);
+    setAddOpen(true);
+  };
+  const closeForm = () => { setAddOpen(false); setEditingId(null); setForm(emptyForm); };
+
+  const submitForm = () => {
+    if (!form.name.trim() || !form.client.trim()) return;
+    const budget = Number(form.amount) || 0;
+    if (editingId != null) {
+      const existing = PROJECTS.find(p => p.id === editingId);
+      const balance = existing ? Math.max(0, budget - existing.paid) : budget;
+      updateProject(editingId, {
+        name: form.name, client: form.client, description: form.description, budget,
+        balance, priority: form.priority, start: form.start, deadline: form.deadline, category: form.category,
+      });
+    } else {
+      addProject({
+        name: form.name, client: form.client, description: form.description, budget,
+        status: 'pending', priority: form.priority, start: form.start || 'TBD', deadline: form.deadline || 'TBD',
+        staff: [], category: form.category,
+      });
+    }
+    closeForm();
+  };
+
   return (
     <div className="space-y-5">
       <PageHeader title="Projects" sub={`${PROJECTS.length} total projects`} breadcrumb={['Home', 'Projects']}
-        actions={<Btn onClick={() => setAddOpen(true)} variant="primary" size="sm" icon={<Plus size={14} />}>New Project</Btn>} />
+        actions={<Btn onClick={openCreate} variant="primary" size="sm" icon={<Plus size={14} />}>New Project</Btn>} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -31,8 +81,13 @@ export default function Projects() {
           icon={<CheckCircle size={18} />} accent="green" />
         <StatCard label="Overdue" value={PROJECTS.filter(p => p.status === 'overdue').length} sub="Past deadline"
           icon={<AlertTriangle size={18} />} accent="red" />
-        <StatCard label="Total Value" value={fmt(PROJECTS.reduce((s, p) => s + p.budget, 0))} sub="All projects"
-          icon={<Clock size={18} />} accent="purple" />
+        {isStaff ? (
+          <StatCard label="My Projects" value={PROJECTS.filter(p => p.staff.includes(currentUserName)).length} sub="Assigned to you"
+            icon={<Briefcase size={18} />} accent="purple" />
+        ) : (
+          <StatCard label="Total Value" value={fmt(PROJECTS.reduce((s, p) => s + p.budget, 0))} sub="All projects"
+            icon={<Clock size={18} />} accent="purple" />
+        )}
       </div>
 
       {/* Filters */}
@@ -52,9 +107,9 @@ export default function Projects() {
 
       {/* Table */}
       <Card>
-        <Table headers={['Project', 'Client', 'Category', 'Budget', 'Paid', 'Balance', 'Deadline', 'Priority', 'Status', '']}>
+        <Table headers={['Project', 'Client', 'Category', 'Amount', 'Paid', 'Balance', 'Deadline', 'Priority', 'Status', '']} empty={filtered.length === 0}>
           {filtered.map(p => (
-            <tr key={p.id} className="cursor-pointer" onClick={() => setDetail(p)}>
+            <tr key={p.id} className="cursor-pointer" onClick={() => setDetailId(p.id)}>
               <Td>
                 <div>
                   <p className="text-xs font-bold text-indigo-600 font-mono">{p.id}</p>
@@ -74,7 +129,7 @@ export default function Projects() {
               <Td><Badge status={p.priority} /></Td>
               <Td><Badge status={p.status} /></Td>
               <Td>
-                <button className="text-xs text-indigo-600 font-semibold hover:underline" onClick={e => { e.stopPropagation(); setDetail(p); }}>
+                <button className="text-xs text-indigo-600 font-semibold hover:underline" onClick={e => { e.stopPropagation(); setDetailId(p.id); }}>
                   View
                 </button>
               </Td>
@@ -84,7 +139,7 @@ export default function Projects() {
       </Card>
 
       {/* Project Detail Modal */}
-      <Modal open={!!detail} onClose={() => setDetail(null)} title="Project Details" width="max-w-2xl">
+      <Modal open={!!detail} onClose={() => setDetailId(null)} title="Project Details" width="max-w-2xl">
         {detail && (
           <div className="space-y-5">
             <div className="flex items-start justify-between">
@@ -101,7 +156,7 @@ export default function Projects() {
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
-                { label: 'Budget', val: fmt(detail.budget), color: 'text-slate-800' },
+                { label: 'Amount', val: fmt(detail.budget), color: 'text-slate-800' },
                 { label: 'Paid', val: fmt(detail.paid), color: 'text-green-700' },
                 { label: 'Balance', val: fmt(detail.balance), color: 'text-red-600' },
                 { label: 'Deadline', val: detail.deadline, color: 'text-slate-800' },
@@ -115,27 +170,27 @@ export default function Projects() {
 
             <div>
               <p className="text-xs font-semibold text-slate-500 mb-2">Payment Progress</p>
-              <ProgressBar value={detail.paid} max={detail.budget}
-                color={detail.paid === detail.budget ? 'green' : detail.status === 'overdue' ? 'red' : 'indigo'} />
+              <ProgressBar value={detail.paid} max={detail.budget || 1}
+                color={detail.paid >= detail.budget ? 'green' : detail.status === 'overdue' ? 'red' : 'indigo'} />
             </div>
 
             <div className="bg-slate-50 rounded-lg p-3">
               <p className="text-xs text-slate-400 mb-1">Description</p>
-              <p className="text-sm text-slate-700">{detail.description}</p>
+              <p className="text-sm text-slate-700">{detail.description || 'No description provided.'}</p>
             </div>
 
             <div>
               <p className="text-xs font-semibold text-slate-500 mb-2">Assigned Staff</p>
               <div className="flex flex-wrap gap-2">
-                {detail.staff.map(s => (
+                {detail.staff.length ? detail.staff.map(s => (
                   <span key={s} className="px-3 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded-full border border-indigo-200">
                     {s}
                   </span>
-                ))}
+                )) : <span className="text-xs text-slate-400">No staff assigned yet.</span>}
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs text-slate-500">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs text-slate-500">
               <div>
                 <span className="font-semibold text-slate-600">Start Date:</span> {detail.start}
               </div>
@@ -144,40 +199,46 @@ export default function Projects() {
               </div>
             </div>
 
-            <div className="flex gap-2 pt-2">
-              <Btn variant="primary" size="sm">Edit Project</Btn>
-              <Btn variant="outline" size="sm">View Tasks</Btn>
-              <Btn variant="outline" size="sm">Record Payment</Btn>
+            <div className="flex gap-2 pt-2 flex-wrap">
+              <Btn variant="primary" size="sm" onClick={() => openEdit(detail)}>Edit Project</Btn>
+              <Btn variant="outline" size="sm" onClick={() => { onViewTasks(detail.name); setDetailId(null); }}>View Tasks</Btn>
+              {!isStaff && (
+                <Btn variant="outline" size="sm" onClick={() => {
+                  onRecordPayment({ projectId: detail.id, client: detail.client, amount: detail.balance });
+                  setDetailId(null);
+                }}>Record Payment</Btn>
+              )}
             </div>
           </div>
         )}
       </Modal>
 
-      {/* Add Project Modal */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Create New Project" width="max-w-xl">
+      {/* Add / Edit Project Modal */}
+      <Modal open={addOpen} onClose={closeForm} title={editingId != null ? 'Edit Project' : 'Create New Project'} width="max-w-xl">
         <div className="space-y-4">
-          <Input label="Project Name" placeholder="Enter project name" required />
-          <Input label="Client Name" placeholder="Client or company name" required />
-          <Textarea label="Description" placeholder="Project details, requirements, deliverables..." rows={3} />
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Budget (GH₵)" type="number" placeholder="0.00" />
-            <Select label="Priority" options={[
+          <Input label="Project Name" placeholder="Enter project name" required value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
+          <Input label="Client Name" placeholder="Client or company name" required value={form.client} onChange={v => setForm(f => ({ ...f, client: v }))} />
+          <Textarea label="Description" placeholder="Project details, requirements, deliverables..." rows={3}
+            value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="Amount (GH₵)" type="number" placeholder="0.00" value={form.amount} onChange={v => setForm(f => ({ ...f, amount: v }))} />
+            <Select label="Priority" value={form.priority} onChange={v => setForm(f => ({ ...f, priority: v }))} options={[
               { label: 'Urgent', value: 'urgent' }, { label: 'High', value: 'high' },
               { label: 'Medium', value: 'medium' }, { label: 'Low', value: 'low' },
             ]} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Start Date" type="date" />
-            <Input label="Deadline" type="date" required />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="Start Date" type="date" value={form.start} onChange={v => setForm(f => ({ ...f, start: v }))} />
+            <Input label="Deadline" type="date" required value={form.deadline} onChange={v => setForm(f => ({ ...f, deadline: v }))} />
           </div>
-          <Select label="Category" options={[
+          <Select label="Category" value={form.category} onChange={v => setForm(f => ({ ...f, category: v }))} options={[
             { label: 'Print', value: 'print' }, { label: 'Photography', value: 'photo' },
             { label: 'Design', value: 'design' }, { label: 'Branding', value: 'branding' },
             { label: 'Print + Photography', value: 'print-photo' }, { label: 'Other', value: 'other' },
           ]} />
           <div className="flex gap-2 pt-2">
-            <Btn variant="primary" size="md">Create Project</Btn>
-            <Btn variant="secondary" size="md" onClick={() => setAddOpen(false)}>Cancel</Btn>
+            <Btn variant="primary" size="md" onClick={submitForm}>{editingId != null ? 'Save Changes' : 'Create Project'}</Btn>
+            <Btn variant="secondary" size="md" onClick={closeForm}>Cancel</Btn>
           </div>
         </div>
       </Modal>

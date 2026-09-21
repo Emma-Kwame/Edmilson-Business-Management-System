@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
-import { INVENTORY } from '../data/mock';
+import { useData } from '../store';
 import { Badge, Btn, Card, PageHeader, SearchInput, Table, Td, Modal, Input, Select, Textarea, StatCard, Alert } from '../components/ui';
 import { Plus, Package, AlertTriangle, XCircle } from 'lucide-react';
 
+const emptyItemForm = { name: '', category: 'paper', unit: 'pieces', qty: '', minStock: '', cost: '' };
+
 export default function Inventory() {
+  const { inventory: INVENTORY, projects: PROJECTS, addInventoryItem, adjustStock } = useData();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [addOpen, setAddOpen] = useState(false);
+  const [itemForm, setItemForm] = useState(emptyItemForm);
   const [stockOpen, setStockOpen] = useState<'add'|'remove'|null>(null);
-  const [selectedItem, setSelectedItem] = useState<typeof INVENTORY[0] | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [qty, setQty] = useState('');
   const [reason, setReason] = useState('');
+  const [relatedProjectId, setRelatedProjectId] = useState('');
+  const [txnType, setTxnType] = useState('added');
   const [showSuccess, setShowSuccess] = useState('');
+
+  const selectedItem = INVENTORY.find(i => i.id === selectedItemId) || null;
 
   const filtered = INVENTORY.filter(i => {
     const matchSearch = i.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -22,6 +30,32 @@ export default function Inventory() {
 
   const lowStock = INVENTORY.filter(i => i.status === 'low-stock');
   const outOfStock = INVENTORY.filter(i => i.status === 'out-of-stock');
+
+  const closeStockModal = () => { setStockOpen(null); setSelectedItemId(null); setQty(''); setReason(''); setRelatedProjectId(''); setTxnType('added'); };
+  const confirmStock = () => {
+    if (!selectedItem || !qty) return;
+    const delta = stockOpen === 'add' ? Number(qty) : -Number(qty);
+    const relatedProject = PROJECTS.find(p => p.id === relatedProjectId)?.name;
+    const note = stockOpen === 'add'
+      ? { added: 'New Purchase', returned: 'Stock Returned', adjustment: 'Stock Adjustment' }[txnType]
+      : [relatedProject, reason].filter(Boolean).join(' — ') || undefined;
+    adjustStock(selectedItem.id, delta, note);
+    setShowSuccess(stockOpen === 'add'
+      ? `Stock added successfully for ${selectedItem.name}.`
+      : `Stock usage recorded for ${selectedItem.name}.`);
+    closeStockModal();
+  };
+
+  const closeAddItem = () => { setAddOpen(false); setItemForm(emptyItemForm); };
+  const submitAddItem = () => {
+    if (!itemForm.name.trim()) return;
+    addInventoryItem({
+      name: itemForm.name, category: itemForm.category, unit: itemForm.unit,
+      qty: Number(itemForm.qty) || 0, minStock: Number(itemForm.minStock) || 0, cost: Number(itemForm.cost) || 0,
+    });
+    setShowSuccess(`${itemForm.name} added to inventory.`);
+    closeAddItem();
+  };
 
   return (
     <div className="space-y-5">
@@ -67,7 +101,7 @@ export default function Inventory() {
 
       {/* Table */}
       <Card>
-        <Table headers={['Item', 'Category', 'Qty', 'Unit', 'Min Stock', 'Unit Cost', 'Status', 'Last Updated', 'Actions']}>
+        <Table headers={['Item', 'Category', 'Qty', 'Unit', 'Min Stock', 'Unit Cost', 'Status', 'Last Updated', 'Actions']} empty={filtered.length === 0}>
           {filtered.map(item => (
             <tr key={item.id} className={item.status === 'out-of-stock' ? 'bg-red-50/50' : item.status === 'low-stock' ? 'bg-amber-50/50' : ''}>
               <Td>
@@ -96,12 +130,13 @@ export default function Inventory() {
               </Td>
               <Td>
                 <div className="flex gap-1">
-                  <button onClick={() => { setSelectedItem(item); setStockOpen('add'); }}
+                  <button onClick={() => { setSelectedItemId(item.id); setStockOpen('add'); }}
                     className="px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition-colors">
                     +Add
                   </button>
-                  <button onClick={() => { setSelectedItem(item); setStockOpen('remove'); }}
-                    className="px-2 py-1 text-xs font-semibold bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors">
+                  <button onClick={() => { setSelectedItemId(item.id); setStockOpen('remove'); }}
+                    disabled={item.qty === 0}
+                    className="px-2 py-1 text-xs font-semibold bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
                     Use
                   </button>
                 </div>
@@ -112,7 +147,7 @@ export default function Inventory() {
       </Card>
 
       {/* Add/Remove Stock Modal */}
-      <Modal open={!!stockOpen} onClose={() => { setStockOpen(null); setQty(''); setReason(''); }}
+      <Modal open={!!stockOpen} onClose={closeStockModal}
         title={stockOpen === 'add' ? `Add Stock — ${selectedItem?.name}` : `Use Stock — ${selectedItem?.name}`}>
         {selectedItem && (
           <div className="space-y-4">
@@ -130,11 +165,9 @@ export default function Inventory() {
 
             {stockOpen === 'remove' && (
               <>
-                <Select label="Related Project" options={[
+                <Select label="Related Project" value={relatedProjectId} onChange={setRelatedProjectId} options={[
                   { label: 'No project', value: '' },
-                  { label: 'Mensah Wedding Package', value: 'prj-1024' },
-                  { label: 'TechGhana Corp Branding', value: 'prj-1025' },
-                  { label: 'UG Graduation 2025', value: 'prj-1028' },
+                  ...PROJECTS.map(p => ({ label: p.name, value: p.id })),
                 ]} />
                 <Textarea label="Reason for Use" value={reason} onChange={setReason}
                   placeholder="Why is this stock being removed?" rows={2} />
@@ -142,7 +175,7 @@ export default function Inventory() {
             )}
 
             {stockOpen === 'add' && (
-              <Select label="Transaction Type" options={[
+              <Select label="Transaction Type" value={txnType} onChange={setTxnType} options={[
                 { label: 'Stock Added (New Purchase)', value: 'added' },
                 { label: 'Stock Returned', value: 'returned' },
                 { label: 'Stock Adjustment', value: 'adjustment' },
@@ -158,46 +191,41 @@ export default function Inventory() {
             )}
 
             <div className="flex gap-2 pt-2">
-              <Btn variant={stockOpen === 'add' ? 'primary' : 'danger'} size="md"
-                onClick={() => {
-                  setStockOpen(null); setQty(''); setReason('');
-                  setShowSuccess(stockOpen === 'add'
-                    ? `Stock added successfully for ${selectedItem.name}.`
-                    : `Stock usage recorded for ${selectedItem.name}.`);
-                }}>
+              <Btn variant={stockOpen === 'add' ? 'primary' : 'danger'} size="md" onClick={confirmStock}>
                 {stockOpen === 'add' ? 'Add Stock' : 'Confirm Use'}
               </Btn>
-              <Btn variant="secondary" size="md" onClick={() => setStockOpen(null)}>Cancel</Btn>
+              <Btn variant="secondary" size="md" onClick={closeStockModal}>Cancel</Btn>
             </div>
           </div>
         )}
       </Modal>
 
       {/* Add Item Modal */}
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add Inventory Item" width="max-w-lg">
+      <Modal open={addOpen} onClose={closeAddItem} title="Add Inventory Item" width="max-w-lg">
         <div className="space-y-4">
-          <Input label="Item Name" placeholder="e.g. A4 Paper (80gsm)" required />
-          <div className="grid grid-cols-2 gap-3">
-            <Select label="Category" options={[
-              { label: 'Paper', value: 'paper' }, { label: 'Ink & Toner', value: 'ink' },
-              { label: 'Print Materials', value: 'print' }, { label: 'Binding', value: 'binding' },
-              { label: 'Lamination', value: 'lamination' }, { label: 'Stationery', value: 'stationery' },
-              { label: 'Packaging', value: 'packaging' }, { label: 'Other', value: 'other' },
+          <Input label="Item Name" placeholder="e.g. A4 Paper (80gsm)" required
+            value={itemForm.name} onChange={v => setItemForm(f => ({ ...f, name: v }))} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Select label="Category" value={itemForm.category} onChange={v => setItemForm(f => ({ ...f, category: v }))} options={[
+              { label: 'Paper', value: 'Paper' }, { label: 'Ink & Toner', value: 'Ink & Toner' },
+              { label: 'Print Materials', value: 'Print Materials' }, { label: 'Binding', value: 'Binding' },
+              { label: 'Lamination', value: 'Lamination' }, { label: 'Stationery', value: 'Stationery' },
+              { label: 'Packaging', value: 'Packaging' }, { label: 'Other', value: 'Other' },
             ]} />
-            <Select label="Unit" options={[
-              { label: 'Reams', value: 'reams' }, { label: 'Packs', value: 'packs' },
-              { label: 'Pieces', value: 'pieces' }, { label: 'Boxes', value: 'boxes' },
-              { label: 'Units', value: 'units' }, { label: 'Rolls', value: 'rolls' },
+            <Select label="Unit" value={itemForm.unit} onChange={v => setItemForm(f => ({ ...f, unit: v }))} options={[
+              { label: 'Reams', value: 'Reams' }, { label: 'Packs', value: 'Packs' },
+              { label: 'Pieces', value: 'Pieces' }, { label: 'Boxes', value: 'Boxes' },
+              { label: 'Units', value: 'Units' }, { label: 'Rolls', value: 'Rolls' },
             ]} />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Initial Quantity" type="number" placeholder="0" />
-            <Input label="Minimum Stock" type="number" placeholder="0" />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="Initial Quantity" type="number" placeholder="0" value={itemForm.qty} onChange={v => setItemForm(f => ({ ...f, qty: v }))} />
+            <Input label="Minimum Stock" type="number" placeholder="0" value={itemForm.minStock} onChange={v => setItemForm(f => ({ ...f, minStock: v }))} />
           </div>
-          <Input label="Unit Cost (GH₵)" type="number" placeholder="0.00" />
+          <Input label="Unit Cost (GH₵)" type="number" placeholder="0.00" value={itemForm.cost} onChange={v => setItemForm(f => ({ ...f, cost: v }))} />
           <div className="flex gap-2 pt-2">
-            <Btn variant="primary" size="md">Add Item</Btn>
-            <Btn variant="secondary" size="md" onClick={() => setAddOpen(false)}>Cancel</Btn>
+            <Btn variant="primary" size="md" onClick={submitAddItem}>Add Item</Btn>
+            <Btn variant="secondary" size="md" onClick={closeAddItem}>Cancel</Btn>
           </div>
         </div>
       </Modal>

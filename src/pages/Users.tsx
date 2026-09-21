@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { USERS } from '../data/mock';
+import type { Role } from '../data/mock';
+import { useData } from '../store';
 import { Card, PageHeader, Table, Td, Badge, Btn, Avatar, Modal, Input, Select } from '../components/ui';
 import { Plus, ShieldCheck } from 'lucide-react';
 
@@ -21,8 +22,13 @@ const ROLE_PERMS: Record<string, Record<string, string[]>> = {
   owner: { Projects: ['view', 'create', 'edit', 'delete', 'approve', 'export'], Tasks: ['view', 'create', 'edit', 'delete', 'approve', 'export'], Inventory: ['view', 'create', 'edit', 'delete', 'export'], Finance: ['view', 'create', 'edit', 'delete', 'approve', 'export'], Staff: ['view', 'create', 'edit', 'delete', 'approve'], Reports: ['view', 'export'], Settings: ['view', 'edit'], 'Audit Log': ['view', 'export'] },
 };
 
+const emptyForm = { firstName: '', lastName: '', email: '', role: 'staff' as Role };
+
 export default function Users() {
+  const { users: USERS, addStaff, updateStaff, toggleStaffStatus } = useData();
   const [addOpen, setAddOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm);
   const [activeRole, setActiveRole] = useState<'staff'|'accountant'|'manager'|'owner'>('owner');
 
   const roleColors: Record<string, string> = {
@@ -30,22 +36,46 @@ export default function Users() {
     accountant: 'bg-amber-100 text-amber-700', staff: 'bg-cyan-100 text-cyan-700',
   };
 
+  const openCreate = () => { setEditingId(null); setForm(emptyForm); setAddOpen(true); };
+  const openEdit = (u: typeof USERS[0]) => {
+    const [firstName, ...rest] = u.name.split(' ');
+    setEditingId(u.id);
+    setForm({ firstName, lastName: rest.join(' '), email: u.email, role: u.role });
+    setAddOpen(true);
+  };
+  const closeForm = () => { setAddOpen(false); setEditingId(null); setForm(emptyForm); };
+
+  const submitForm = () => {
+    if (!form.firstName.trim() || !form.email.trim()) return;
+    const name = `${form.firstName} ${form.lastName}`.trim();
+    if (editingId != null) {
+      updateStaff(editingId, { name, email: form.email, role: form.role });
+    } else {
+      addStaff({
+        name, email: form.email, role: form.role, position: 'New Hire', dept: 'Unassigned',
+        avatar: name.slice(0, 2).toUpperCase(), joined: new Date().toISOString().slice(0, 10),
+        phone: '', status: 'active',
+      });
+    }
+    closeForm();
+  };
+
   return (
     <div className="space-y-5">
       <PageHeader title="Users & Roles" sub="Manage access control and permissions" breadcrumb={['Home', 'Users & Roles']}
-        actions={<Btn onClick={() => setAddOpen(true)} variant="primary" size="sm" icon={<Plus size={14} />}>Add User</Btn>} />
+        actions={<Btn onClick={openCreate} variant="primary" size="sm" icon={<Plus size={14} />}>Add User</Btn>} />
 
       {/* Users Table */}
       <Card>
         <div className="p-5 border-b border-slate-100">
           <h3 className="font-bold text-slate-800 font-display">All Users</h3>
         </div>
-        <Table headers={['User', 'Email', 'Role', 'Status', 'Last Login', 'Actions']}>
+        <Table headers={['User', 'Email', 'Role', 'Status', 'Actions']}>
           {USERS.map(u => (
             <tr key={u.id}>
               <Td>
                 <div className="flex items-center gap-2">
-                  <Avatar initials={u.avatar} size="sm" />
+                  <Avatar initials={u.avatar} src={u.avatarUrl} size="sm" />
                   <div>
                     <p className="text-xs font-semibold text-slate-800">{u.name}</p>
                     <p className="text-xs text-slate-400">{u.position}</p>
@@ -59,11 +89,13 @@ export default function Users() {
                 </span>
               </Td>
               <Td><Badge status={u.status} /></Td>
-              <Td mono><span className="text-xs text-slate-400">2025-09-18</span></Td>
               <Td>
                 <div className="flex gap-2">
-                  <button className="text-xs text-indigo-600 font-semibold hover:underline">Edit</button>
-                  <button className="text-xs text-red-500 font-semibold hover:underline">Disable</button>
+                  <button onClick={() => openEdit(u)} className="text-xs text-indigo-600 font-semibold hover:underline">Edit</button>
+                  <button onClick={() => toggleStaffStatus(u.id)}
+                    className={`text-xs font-semibold hover:underline ${u.status === 'active' ? 'text-red-500' : 'text-green-600'}`}>
+                    {u.status === 'active' ? 'Disable' : 'Enable'}
+                  </button>
                 </div>
               </Td>
             </tr>
@@ -123,20 +155,20 @@ export default function Users() {
         </div>
       </Card>
 
-      <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add New User" width="max-w-lg">
+      <Modal open={addOpen} onClose={closeForm} title={editingId != null ? 'Edit User' : 'Add New User'} width="max-w-lg">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="First Name" placeholder="First name" required />
-            <Input label="Last Name" placeholder="Last name" required />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input label="First Name" placeholder="First name" required value={form.firstName} onChange={v => setForm(f => ({ ...f, firstName: v }))} />
+            <Input label="Last Name" placeholder="Last name" required value={form.lastName} onChange={v => setForm(f => ({ ...f, lastName: v }))} />
           </div>
-          <Input label="Email Address" type="email" placeholder="email@printcraft.gh" required />
-          <Select label="Role" options={[
+          <Input label="Email Address" type="email" placeholder="email@edmilsongp.com" required value={form.email} onChange={v => setForm(f => ({ ...f, email: v }))} />
+          <Select label="Role" value={form.role} onChange={v => setForm(f => ({ ...f, role: v as Role }))} options={[
             { label: 'Staff', value: 'staff' }, { label: 'Accountant', value: 'accountant' },
             { label: 'Manager', value: 'manager' }, { label: 'Owner / Admin', value: 'owner' },
           ]} />
           <div className="flex gap-2 pt-2">
-            <Btn variant="primary" size="md">Send Invite</Btn>
-            <Btn variant="secondary" size="md" onClick={() => setAddOpen(false)}>Cancel</Btn>
+            <Btn variant="primary" size="md" onClick={submitForm}>{editingId != null ? 'Save Changes' : 'Send Invite'}</Btn>
+            <Btn variant="secondary" size="md" onClick={closeForm}>Cancel</Btn>
           </div>
         </div>
       </Modal>
