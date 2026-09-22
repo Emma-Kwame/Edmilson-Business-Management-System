@@ -134,7 +134,7 @@ export default function Attendance({ role }: { role: Role }) {
                       <Td mono><span className="text-xs">{att?.clockIn || '—'}</span></Td>
                       <Td mono><span className="text-xs">{att?.clockOut || '—'}</span></Td>
                       <Td mono><span className="text-xs">{att?.hours || '—'}</span></Td>
-                      <Td><Badge status={att?.status || 'absent'} /></Td>
+                      <Td><Badge status={att?.status || 'not-clocked-in'} /></Td>
                     </tr>
                   );
                 })}

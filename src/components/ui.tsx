@@ -15,12 +15,13 @@ export function Badge({ status, label }: { status: string; label?: string }) {
     'in-stock': 'badge-instock', 'low-stock': 'badge-lowstock', 'out-of-stock': 'badge-outstock',
     active: 'badge-present', inactive: 'badge-absent',
     income: 'badge-paid', expense: 'badge-overdue',
+    'not-clocked-in': 'badge-pending',
   };
   const displayMap: Record<string, string> = {
     'in-progress': 'In Progress', 'not-started': 'Not Started', 'on-hold': 'On Hold',
     'early-departure': 'Early Departure', 'on-leave': 'On Leave',
     'in-stock': 'In Stock', 'low-stock': 'Low Stock', 'out-of-stock': 'Out of Stock',
-    'partially-paid': 'Partial',
+    'partially-paid': 'Partial', 'not-clocked-in': 'Not Clocked In',
   };
   const cls = map[status] || 'badge-draft';
   const text = label || displayMap[status] || status.charAt(0).toUpperCase() + status.slice(1);
