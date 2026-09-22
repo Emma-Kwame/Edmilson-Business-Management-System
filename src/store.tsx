@@ -105,6 +105,18 @@ export function weeklyAttendance(attendance: AttendanceT[]) {
   });
 }
 
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** Present vs. late, judged against that day's business hours + the configured grace period — not a hardcoded guess. */
+function clockInStatus(now: Date, settings: CompanySettingsT | null): string {
+  const hours = settings?.businessHours?.[WEEKDAY_NAMES[now.getDay()]];
+  if (!hours) return 'present'; // not a configured business day — no start time to be late against
+  const [startH, startM] = hours[0].split(':').map(Number);
+  const cutoff = new Date(now);
+  cutoff.setHours(startH, startM + (settings?.lateThresholdMinutes ?? 0), 0, 0);
+  return now.getTime() > cutoff.getTime() ? 'late' : 'present';
+}
+
 // ─── snake_case (Postgres) ⇄ camelCase (app) mappers ───────────────────────
 const mapProfile = (r: any): UserT => ({
   id: r.id, name: r.name, username: r.username, email: r.email, role: r.role, position: r.position,
@@ -651,21 +663,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!profile) return;
     const now = new Date();
     const label = timeNow();
+    const status = clockInStatus(now, companySettings);
     const existing = attendance.find(a => a.staffId === profile.id && a.date === TODAY);
     if (existing) {
       const { data, error } = await supabase.from('attendance')
-        .update({ clock_in: label, clock_in_at: now.toISOString(), status: 'present' }).eq('id', existing.id).select().single();
+        .update({ clock_in: label, clock_in_at: now.toISOString(), status }).eq('id', existing.id).select().single();
       if (error || !data) return handleError(error, 'Could not clock in.');
       setAttendance(prev => prev.map(a => a.id === existing.id ? mapAttendance(data) : a));
     } else {
       const { data, error } = await supabase.from('attendance').insert({
-        staff_id: profile.id, staff: profile.name, date: TODAY, clock_in: label, clock_in_at: now.toISOString(), status: 'present',
+        staff_id: profile.id, staff: profile.name, date: TODAY, clock_in: label, clock_in_at: now.toISOString(), status,
       }).select().single();
       if (error || !data) return handleError(error, 'Could not clock in.');
       setAttendance(prev => [mapAttendance(data), ...prev]);
     }
     setMyClockInAt(now);
-    await addAuditLog('Clocked in', 'Attendance');
+    await addAuditLog(status === 'late' ? 'Clocked in late' : 'Clocked in', 'Attendance');
   };
   const clockOut = async () => {
     if (!profile) return;
