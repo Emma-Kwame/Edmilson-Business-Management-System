@@ -323,14 +323,14 @@ create policy profiles_update on public.profiles for update
   using (id = auth.uid() or get_my_role() in ('manager', 'owner'));
 
 -- ---- projects --------------------------------------------------------------
--- staff: ['view']   accountant: ['view']   manager: ['view','create','edit','approve']   owner: all
+-- staff: ['view']   accountant: ['view','create']   manager: ['view','create','edit','approve']   owner: all
 drop policy if exists projects_select on public.projects;
 create policy projects_select on public.projects for select
   using (true);
 
 drop policy if exists projects_insert on public.projects;
 create policy projects_insert on public.projects for insert
-  with check (get_my_role() in ('manager', 'owner'));
+  with check (get_my_role() in ('accountant', 'manager', 'owner'));
 
 drop policy if exists projects_update on public.projects;
 create policy projects_update on public.projects for update
@@ -341,7 +341,7 @@ create policy projects_delete on public.projects for delete
   using (get_my_role() = 'owner');
 
 -- ---- tasks -------------------------------------------------------------
--- staff: ['view','edit'] (own tasks only)   accountant: ['view']
+-- staff: ['view','edit'] (own tasks only)   accountant: ['view','create']
 -- manager: ['view','create','edit','delete','approve']   owner: all
 drop policy if exists tasks_select on public.tasks;
 create policy tasks_select on public.tasks for select
@@ -350,7 +350,7 @@ create policy tasks_select on public.tasks for select
 drop policy if exists tasks_insert on public.tasks;
 create policy tasks_insert on public.tasks for insert
   with check (
-    get_my_role() in ('manager', 'owner')
+    get_my_role() in ('accountant', 'manager', 'owner')
     or (get_my_role() = 'staff' and assigned = my_name())
   );
 
@@ -375,14 +375,14 @@ create policy task_comments_insert on public.task_comments for insert
   with check (get_my_role() in ('staff', 'accountant', 'manager', 'owner'));
 
 -- ---- inventory ----------------------------------------------------------
--- staff: ['view']   accountant: ['view']   manager: ['view','create','edit']   owner: all
+-- staff: ['view']   accountant: ['view','create']   manager: ['view','create','edit']   owner: all
 drop policy if exists inventory_select on public.inventory;
 create policy inventory_select on public.inventory for select
   using (true);
 
 drop policy if exists inventory_insert on public.inventory;
 create policy inventory_insert on public.inventory for insert
-  with check (get_my_role() in ('manager', 'owner'));
+  with check (get_my_role() in ('accountant', 'manager', 'owner'));
 
 drop policy if exists inventory_update on public.inventory;
 create policy inventory_update on public.inventory for update

@@ -17,7 +17,7 @@ const MODULES = ['Projects', 'Tasks', 'Inventory', 'Finance', 'Staff', 'Reports'
 
 const ROLE_PERMS: Record<string, Record<string, string[]>> = {
   staff: { Projects: ['view'], Tasks: ['view', 'edit'], Inventory: ['view'], Finance: [], Staff: [], Reports: [], Settings: ['view'], 'Audit Log': [] },
-  accountant: { Projects: ['view'], Tasks: ['view'], Inventory: ['view'], Finance: ['view', 'create', 'edit', 'export'], Staff: ['view'], Reports: ['view', 'export'], Settings: ['view'], 'Audit Log': ['view'] },
+  accountant: { Projects: ['view', 'create'], Tasks: ['view', 'create'], Inventory: ['view', 'create'], Finance: ['view', 'create', 'edit', 'export'], Staff: ['view'], Reports: ['view', 'export'], Settings: ['view'], 'Audit Log': ['view'] },
   manager: { Projects: ['view', 'create', 'edit', 'approve'], Tasks: ['view', 'create', 'edit', 'delete', 'approve'], Inventory: ['view', 'create', 'edit'], Finance: ['view', 'export'], Staff: ['view', 'create', 'edit'], Reports: ['view', 'export'], Settings: ['view', 'edit'], 'Audit Log': ['view'] },
   owner: { Projects: ['view', 'create', 'edit', 'delete', 'approve', 'export'], Tasks: ['view', 'create', 'edit', 'delete', 'approve', 'export'], Inventory: ['view', 'create', 'edit', 'delete', 'export'], Finance: ['view', 'create', 'edit', 'delete', 'approve', 'export'], Staff: ['view', 'create', 'edit', 'delete', 'approve'], Reports: ['view', 'export'], Settings: ['view', 'edit'], 'Audit Log': ['view', 'export'] },
 };

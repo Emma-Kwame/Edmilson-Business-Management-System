@@ -34,7 +34,7 @@ export default function Tasks({ role, initialProjectFilter }: { role: Role; init
   const [detailTaskId, setDetailTaskId] = useState<number | null>(null);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
   const [commentDraft, setCommentDraft] = useState('');
-  const canAssign = role === 'manager' || role === 'owner';
+  const canAssign = role === 'manager' || role === 'owner' || role === 'accountant';
 
   const detailTask = TASKS.find(t => t.id === detailTaskId) || null;
 
