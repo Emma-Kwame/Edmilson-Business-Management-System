@@ -21,6 +21,7 @@ export interface MfaFactor { id: string; friendlyName?: string; status: string; 
 export interface AttendanceT {
   id: number; staffId: string | null; staff: string; date: string;
   clockIn: string | null; clockOut: string | null; hours: string; status: string;
+  clockInAt: string | null; clockOutAt: string | null;
 }
 export interface TaskT {
   id: number; name: string; project: string; assigned: string;
@@ -137,6 +138,7 @@ const mapTransaction = (r: any): TransactionT => ({
 const mapAttendance = (r: any): AttendanceT => ({
   id: r.id, staffId: r.staff_id, staff: r.staff, date: r.date,
   clockIn: r.clock_in, clockOut: r.clock_out, hours: r.hours, status: r.status,
+  clockInAt: r.clock_in_at, clockOutAt: r.clock_out_at,
 });
 const mapNotification = (r: any): NotificationT => ({
   id: r.id, title: r.title, message: r.message, type: r.type, read: r.read, time: r.time, icon: r.icon,
@@ -652,12 +654,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     const existing = attendance.find(a => a.staffId === profile.id && a.date === TODAY);
     if (existing) {
       const { data, error } = await supabase.from('attendance')
-        .update({ clock_in: label, status: 'present' }).eq('id', existing.id).select().single();
+        .update({ clock_in: label, clock_in_at: now.toISOString(), status: 'present' }).eq('id', existing.id).select().single();
       if (error || !data) return handleError(error, 'Could not clock in.');
       setAttendance(prev => prev.map(a => a.id === existing.id ? mapAttendance(data) : a));
     } else {
       const { data, error } = await supabase.from('attendance').insert({
-        staff_id: profile.id, staff: profile.name, date: TODAY, clock_in: label, status: 'present',
+        staff_id: profile.id, staff: profile.name, date: TODAY, clock_in: label, clock_in_at: now.toISOString(), status: 'present',
       }).select().single();
       if (error || !data) return handleError(error, 'Could not clock in.');
       setAttendance(prev => [mapAttendance(data), ...prev]);
@@ -669,15 +671,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
     if (!profile) return;
     const now = new Date();
     const label = timeNow();
-    let hoursLabel = '-';
-    if (myClockInAt) {
-      const mins = Math.max(0, Math.round((now.getTime() - myClockInAt.getTime()) / 60000));
-      hoursLabel = `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
-    }
     const existing = attendance.find(a => a.staffId === profile.id && a.date === TODAY);
     if (!existing) return;
+    // Read the clock-in moment back from the row itself (not local React state) —
+    // that way hours worked still compute correctly even if the page was reloaded,
+    // or a different device did the clock-in, between clock-in and clock-out.
+    let hoursLabel = '-';
+    const clockedInAt = existing.clockInAt ? new Date(existing.clockInAt) : null;
+    if (clockedInAt) {
+      const mins = Math.max(0, Math.round((now.getTime() - clockedInAt.getTime()) / 60000));
+      hoursLabel = `${Math.floor(mins / 60)}h ${String(mins % 60).padStart(2, '0')}m`;
+    }
     const { data, error } = await supabase.from('attendance')
-      .update({ clock_out: label, hours: hoursLabel }).eq('id', existing.id).select().single();
+      .update({ clock_out: label, clock_out_at: now.toISOString(), hours: hoursLabel }).eq('id', existing.id).select().single();
     if (error || !data) return handleError(error, 'Could not clock out.');
     setAttendance(prev => prev.map(a => a.id === existing.id ? mapAttendance(data) : a));
     setMyClockInAt(null);

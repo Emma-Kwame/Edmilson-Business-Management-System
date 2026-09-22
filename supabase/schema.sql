@@ -264,6 +264,13 @@ create table if not exists public.attendance (
   status text not null default 'present'
 );
 
+-- Real timestamps behind the display strings above, so hours worked can be
+-- computed from the stored clock-in moment at clock-out time instead of
+-- relying on the browser remembering it — that broke across page reloads
+-- and across devices.
+alter table public.attendance add column if not exists clock_in_at timestamptz;
+alter table public.attendance add column if not exists clock_out_at timestamptz;
+
 create table if not exists public.notifications (
   id bigint generated always as identity primary key,
   title text not null,
